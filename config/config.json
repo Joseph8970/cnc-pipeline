@@ -1,0 +1,90 @@
+﻿{
+  "paths": {
+    "inbox_raw_dxf": "C:\\CNC\\inbox_raw_dxf",
+    "to_woodwop":    "C:\\CNC\\to_woodwop",
+    "mpr_out":       "C:\\CNC\\mpr_out",
+    "archive":       "C:\\CNC\\archive",
+    "logs":          "C:\\CNC\\logs",
+    "normalizer":    "C:\\CNC\\dxf_normalizer.py"
+  },
+
+  "machining": {
+    "through_tolerance_mm":    0.5,
+    "spoilboard_overrun_mm":   1.0,
+    "contour_z_approach_mm":   3.0,
+    "default_feed_rate":       10.0,
+    "default_spindle_rpm":     18000
+  },
+
+  "tools": {
+    "vertical_drill": {
+      "diameters": [5.0, 8.0, 10.0, 15.0, 20.0, 25.0, 35.0],
+      "tool_numbers": {
+        "5.0":  "60",
+        "8.0":  "61",
+        "10.0": "62",
+        "15.0": "63",
+        "20.0": "64",
+        "25.0": "65",
+        "35.0": "66",
+        "default": "60"
+      }
+    },
+    "horizontal_drill": {
+      "default_tool_number": "50",
+      "default_diameter":    8.0
+    },
+    "contour_routing": {
+      "default_tool_number": "101",
+      "default_diameter":    12.0,
+      "workstations": "1,2,3,401,402,403"
+    },
+    "groove": {
+      "default_tool_number": "40",
+      "default_diameter":    4.0,
+      "workstations": "40,41,42,45,141,142"
+    },
+    "routing_tools": {
+      "outer_scoring_tno":       "134",
+      "outer_through_tno":       "130",
+      "pocket_tno":              "132",
+      "outer_scoring_depth":     2.0,
+      "workstations":            "1,2,3,401,402,403",
+      "plywood_finish_depth":    0.7,
+      "small_part_threshold_mm": 76.2,
+      "small_part_finish_depth": 0.5,
+      "large_part_finish_depth": 0.0,
+      "pocket_workstations":     "1,3,4,133,135,137,139,211,213,214,215,216,217,401,403"
+    }
+  },
+
+  "layer_mapping": {
+    "workpiece_prefix":      "ProcPart_",
+    "outer_contour_layer":   "V_Fraes_2T134R",
+    "drill_prefix":          "V_DrillSF_",
+    "routing_prefix":        "V_Fraes_",
+    "right_compensation_suffix": "T134R",
+    "left_compensation_suffix":  "T134L"
+  },
+
+  "mpr": {
+    "version":          "4.0 Alpha",
+    "woodwop_version":  "9.0.152",
+    "profile":          "CadCamLT",
+    "material":         "HOMAG",
+    "default_fnx":      0.0,
+    "default_fny":      0.0
+  },
+
+  "output": {
+    "overwrite_existing":   true,
+    "filename_template":    "{label}_{block}.mpr",
+    "unknown_label":        "PART"
+  },
+
+  "watcher": {
+    "debounce_seconds":           1.5,
+    "process_existing_on_start":  false,
+    "extensions":                 [".dxf"]
+  }
+}

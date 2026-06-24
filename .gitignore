@@ -1,0 +1,34 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+*.egg-info/
+
+# Pipeline output / runtime folders
+mpr_out/
+to_woodwop/
+to_woodwop2/
+to_woodwop_test/
+to_woodwop_test2/
+archive/
+inbox_raw_dxf/
+logs/
+tmp_pdf_test/
+
+# Lock / log files
+watch_dxf.lock
+watch_dxf.log
+*.log
+
+# Loose DXF / MPR files at repo root (test artifacts)
+*.dxf
+*.mpr
+
+# Scratch scripts
+inspect_block.py
+inspect_dxf_layers.py
+trace_report.py
+trace_temp.py
+pdf_studio_inline_check.js
+tools/

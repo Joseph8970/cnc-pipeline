@@ -1,0 +1,3 @@
+# requirements.txt
+ezdxf>=1.0
+watchdog>=4.0
