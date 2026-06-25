@@ -23,14 +23,11 @@ Core features kept:
 
 from __future__ import annotations
 
-import math
 import re
 import time
 from math import hypot
 from pathlib import Path
 from typing import List, Tuple, Optional
-
-from src.geometry.geometry_engine import ArcSegment, lwpolyline_to_segments
 
 import ezdxf
 from ezdxf.entities import Ellipse, Spline
@@ -438,50 +435,10 @@ def rename_layers_in_layout(layout, material: str):
         except Exception:
             continue
 
-def _arc_to_bulge(arc: ArcSegment) -> float:
-    """Convert an ArcSegment back to an LWPOLYLINE bulge value."""
-    cx, cy = arc.center
-    sx, sy = arc.start
-    ex, ey = arc.end
-    a_start = math.atan2(sy - cy, sx - cx)
-    a_end   = math.atan2(ey - cy, ex - cx)
-    if arc.ccw:
-        sweep = (a_end - a_start) % (2 * math.pi)
-    else:
-        sweep = (a_start - a_end) % (2 * math.pi)
-    bulge = math.tan(sweep / 4.0)
-    return bulge if arc.ccw else -bulge
-
-
-def _merge_arcs_in_xyb(
-    pts: List[Tuple[float, float, float]],
-    closed: bool,
-) -> List[Tuple[float, float, float]]:
-    """Merge consecutive co-circular arcs; return simplified (x, y, bulge) list."""
-    if len(pts) < 2:
-        return pts
-    try:
-        segs = lwpolyline_to_segments(pts, closed)
-    except Exception:
-        return pts
-    if not segs:
-        return pts
-    result: List[Tuple[float, float, float]] = []
-    for seg in segs:
-        b = _arc_to_bulge(seg) if isinstance(seg, ArcSegment) else 0.0
-        sx, sy = seg.start
-        result.append((sx, sy, b))
-    if not closed:
-        ex, ey = segs[-1].end
-        result.append((ex, ey, 0.0))
-    return result
-
-
 def process_polylines_in_layout(layout):
     for lw in list(layout.query("LWPOLYLINE")):
         try:
             pts, closed = lwpolyline_points_xyb(lw)
-            pts = _merge_arcs_in_xyb(pts, closed)
             new_pts, new_closed = insert_midpoint_as_first(pts, closed)
             set_lwpolyline_points(lw, new_pts, new_closed)
         except Exception:
