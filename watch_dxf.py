@@ -225,19 +225,44 @@ def _run_normalizer(raw_dxf: Path, out_dir: Path) -> list[Path]:
 
 
 def _run_concave_holes(norm_dxf: Path, out_dir: Path) -> Path | None:
-    """Run auto_concave_holes.process_file on *norm_dxf*, saving to *out_dir*.
-    Returns the output path, or None on failure."""
-    from auto_concave_holes import process_file as _concave_process
+    """Run auto_concave_holes.py as a subprocess on *norm_dxf*, saving to *out_dir*.
 
+    Running as a subprocess (not an import) guarantees the OS has fully flushed
+    ezdxf's file writes to disk before dxf_to_mpr reads the output.
+    Returns the output path, or None on failure.
+    """
     out_dir.mkdir(parents=True, exist_ok=True)
     out_path = out_dir / norm_dxf.name
+    script   = _HERE / "auto_concave_holes.py"
     try:
-        n = _concave_process(norm_dxf, out_path)
-        _clog.info("  Concave holes: %d hole(s) added -> %s", n, out_path.name)
-        return out_path
-    except Exception as exc:
-        _elog.exception("Concave hole processing failed for %s: %s", norm_dxf.name, exc)
+        result = subprocess.run(
+            [sys.executable, str(script), str(norm_dxf), str(out_path)],
+            capture_output=True, text=True, timeout=120,
+            cwd=str(_HERE),
+        )
+    except subprocess.TimeoutExpired:
+        _elog.error("auto_concave_holes timed out for %s", norm_dxf.name)
         return None
+    except Exception as exc:
+        _elog.exception("auto_concave_holes failed for %s: %s", norm_dxf.name, exc)
+        return None
+
+    for line in result.stdout.splitlines():
+        _clog.debug("  [concave] %s", line)
+    if result.stderr:
+        for line in result.stderr.splitlines():
+            _elog.error("  [concave stderr] %s", line)
+
+    if result.returncode != 0:
+        _elog.error("auto_concave_holes exited %d for %s", result.returncode, norm_dxf.name)
+        return None
+
+    if not out_path.exists():
+        _elog.error("auto_concave_holes produced no output file for %s", norm_dxf.name)
+        return None
+
+    _clog.info("  Concave holes done -> %s", out_path.name)
+    return out_path
 
 
 def _run_mpr(norm_dxf: Path) -> int:
@@ -301,22 +326,25 @@ def _process(raw_dxf: Path) -> None:
         _diag("Normalized DXF", nf)
 
     # ---- 2. (PLYWOOD only) Concave holes -> to_woodwop2/ -----------------
-    # auto_concave_holes.py writes a side-copy to to_woodwop2/ for secondary
-    # use (e.g. a different machine), but its output is NOT used for MPR
-    # generation because it strips most geometry.  MPR always uses the
-    # original normalised DXF from to_woodwop/.
+    # Plywood workflow: normalizer -> auto_concave_holes -> dxf_to_mpr
+    # Non-plywood workflow: normalizer -> dxf_to_mpr  (skip concave holes)
     if plywood:
-        _clog.info("Running Concave Hole Processor (side-output only)...")
+        _clog.info("Running Concave Hole Processor (plywood path)...")
+        processed: list[Path] = []
         for nf in norm_files:
             out = _run_concave_holes(nf, _WOODWOP2)
             if out:
-                _diag("Concave-hole DXF (side-output, not used for MPR)", out)
+                _diag("Concave-hole DXF", out, fingerprint=True)
+                processed.append(out)
             else:
                 _elog.warning("Concave hole processor produced no output for %s", nf.name)
+        if not processed:
+            _elog.error("No concave-hole output — cannot generate MPR for %s", raw_dxf.name)
+            return
+        mpr_sources = processed   # use to_woodwop2/ output for plywood MPR
     else:
         _diag("Concave-hole DXF", None)   # step skipped for non-plywood
-
-    mpr_sources = norm_files  # always convert from the normalised to_woodwop/ copy
+        mpr_sources = norm_files           # use to_woodwop/ output directly
 
     # ---- 3. Generate MPR -------------------------------------------------
     _clog.info("Generating MPR...")
