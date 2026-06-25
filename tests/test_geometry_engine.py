@@ -156,6 +156,39 @@ class TestMergeConsecutiveArcs:
         result = merge_consecutive_arcs([arc1, arc2])
         assert len(result) == 2
 
+    # --- bridge tests ---
+
+    def test_small_line_bridge_absorbed(self):
+        # Two quarter-arcs on unit circle with a tiny 0.5 mm line bridge between them.
+        # arc1: (1,0) → (0,1),  bridge: (0,1) → (0,1.0005) [0.5 mm],  arc2: (0,1.0005) → (-1,0)
+        b = math.tan(math.pi / 8)
+        bridge_end = (0.0, 1.0005)
+        verts1 = [(1.0, 0.0, b), (0.0, 1.0, 0.0)]
+        verts2 = [bridge_end, (-1.0, 0.0)]
+        seg1 = lwpolyline_to_segments(verts1, closed=False)[0]
+        bridge = LineSegment((0.0, 1.0), bridge_end)
+        # Manually build arc2 using the same bulge from bridge_end to (-1,0)
+        # approximation: just reuse the arc from (0,1) to (-1,0) but with shifted start
+        arc2_raw = lwpolyline_to_segments([(0.0, 1.0, b), (-1.0, 0.0, 0.0)], closed=False)[0]
+        arc2 = ArcSegment(start=bridge_end, end=arc2_raw.end,
+                          center=arc2_raw.center, radius=arc2_raw.radius, ccw=arc2_raw.ccw)
+        result = merge_consecutive_arcs([seg1, bridge, arc2], max_bridge_mm=1.0)
+        assert len(result) == 1
+        assert isinstance(result[0], ArcSegment)
+        assert result[0].start == (1.0, 0.0)
+        assert result[0].end == (-1.0, 0.0)
+
+    def test_large_line_bridge_not_absorbed(self):
+        # A 10 mm line bridge between two arcs should NOT be absorbed
+        b = math.tan(math.pi / 8)
+        seg1 = lwpolyline_to_segments([(1.0, 0.0, b), (0.0, 1.0, 0.0)], closed=False)[0]
+        big_bridge = LineSegment((0.0, 1.0), (0.0, 11.0))
+        arc2_raw = lwpolyline_to_segments([(0.0, 1.0, b), (-1.0, 0.0, 0.0)], closed=False)[0]
+        arc2 = ArcSegment(start=(0.0, 11.0), end=arc2_raw.end,
+                          center=arc2_raw.center, radius=arc2_raw.radius, ccw=arc2_raw.ccw)
+        result = merge_consecutive_arcs([seg1, big_bridge, arc2])
+        assert len(result) == 3
+
 
 class TestContourClosure:
     def test_closed(self):

@@ -187,62 +187,103 @@ def _circumradius(p1: Point2D, p2: Point2D, p3: Point2D) -> float:
     return (a * b * c) / D
 
 
-def _chord_length(arc: ArcSegment) -> float:
-    return math.hypot(arc.end[0] - arc.start[0], arc.end[1] - arc.start[1])
+def _seg_chord(seg: Segment) -> float:
+    return math.hypot(seg.end[0] - seg.start[0], seg.end[1] - seg.start[1])
+
+
+def _is_co_circular(
+    run_start: Point2D,
+    candidate: ArcSegment,
+    ref_radius: float,
+    ref_ccw: bool,
+    radius_rel_tol: float,
+) -> bool:
+    """Return True if *candidate* continues the same circle as *ref_radius* / *ref_ccw*."""
+    if candidate.ccw != ref_ccw:
+        return False
+    avg_r = (candidate.radius + ref_radius) / 2.0
+    if abs(candidate.radius - ref_radius) > radius_rel_tol * avg_r:
+        return False
+    cr = _circumradius(run_start, candidate.start, candidate.end)
+    return abs(cr - avg_r) <= radius_rel_tol * avg_r
 
 
 def merge_consecutive_arcs(
     segments: List[Segment],
     radius_rel_tol: float = 0.01,
+    max_bridge_mm: float = 2.0,
 ) -> List[Segment]:
-    """Collapse runs of consecutive ArcSegments that lie on the same circle.
+    """Collapse runs of co-circular ArcSegments into single arcs.
 
-    Co-circularity is tested geometrically: the circumradius of the three
-    control points (run start, junction, run end) must match the arc radius
-    within *radius_rel_tol* × radius.  This avoids dependence on the
-    internally stored center, which can drift depending on chord direction.
+    Two extension rules beyond strictly adjacent arcs:
 
-    The merged arc reuses the center/radius of the arc with the longest chord
-    in the run (the "longest arc" reference per the user requirement).
+    1. Direct merge — consecutive ArcSegments on the same circle are always
+       merged (no size limit).
+
+    2. Bridge merge — a single small segment (line or arc) separating two
+       co-circular arcs is absorbed when its chord length ≤ *max_bridge_mm*
+       AND ≤ 5 % of the arc radius.  The bridge is discarded; the result is
+       one continuous arc from the first arc's start to the second arc's end.
+
+    Co-circularity is detected geometrically via circumradius so it does not
+    depend on the internally stored center (which is chord-direction-dependent
+    and inconsistent across arcs on the same circle).
+
+    The merged arc uses the center/radius of the arc with the longest chord
+    in the run ("longest arc" reference).
     """
     if not segments:
         return segments
 
     result: List[Segment] = []
     i = 0
-    while i < len(segments):
+    n = len(segments)
+    while i < n:
         seg = segments[i]
         if not isinstance(seg, ArcSegment):
             result.append(seg)
             i += 1
             continue
 
-        # Accumulate a run of co-circular consecutive arcs
+        # Start a merge group; track the run's anchor start point separately
+        # so circumradius checks always use the true first point.
         group: List[ArcSegment] = [seg]
+        run_start: Point2D = seg.start
         j = i + 1
-        while j < len(segments):
+
+        while j < n:
             nxt = segments[j]
-            if not isinstance(nxt, ArcSegment):
-                break
-            prev = group[-1]
-            if nxt.ccw != prev.ccw:
-                break
-            avg_r = (nxt.radius + prev.radius) / 2.0
-            if abs(nxt.radius - prev.radius) > radius_rel_tol * avg_r:
-                break
-            # Geometric co-circle check: circumradius of (group[0].start,
-            # prev.end, nxt.end) must equal the arc radius.
-            cr = _circumradius(group[0].start, prev.end, nxt.end)
-            if abs(cr - avg_r) > radius_rel_tol * avg_r:
-                break
-            group.append(nxt)
-            j += 1
+
+            if isinstance(nxt, ArcSegment):
+                # Direct (adjacent) arc — check co-circularity
+                if _is_co_circular(run_start, nxt, group[0].radius, group[0].ccw, radius_rel_tol):
+                    group.append(nxt)
+                    j += 1
+                    continue
+                break  # different circle → stop
+
+            # Non-arc bridge candidate
+            if j + 1 < n:
+                after = segments[j + 1]
+                if isinstance(after, ArcSegment):
+                    bridge_chord = _seg_chord(nxt)
+                    avg_r = (after.radius + group[0].radius) / 2.0
+                    bridge_ok = (bridge_chord <= max_bridge_mm
+                                 and bridge_chord <= 0.05 * avg_r)
+                    if bridge_ok and _is_co_circular(
+                        run_start, after, group[0].radius, group[0].ccw,
+                        radius_rel_tol,
+                    ):
+                        # Absorb bridge + next arc; run_start stays fixed
+                        group.append(after)
+                        j += 2
+                        continue
+            break  # bridge too large, or nothing useful after it
 
         if len(group) == 1:
             result.append(seg)
         else:
-            # Reference arc: the one with the longest chord
-            ref = max(group, key=_chord_length)
+            ref = max(group, key=_seg_chord)
             result.append(ArcSegment(
                 start=group[0].start,
                 end=group[-1].end,
