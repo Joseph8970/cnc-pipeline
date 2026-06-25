@@ -171,6 +171,91 @@ def _arc_from_bulge(
 
 
 # ---------------------------------------------------------------------------
+# Arc merging
+# ---------------------------------------------------------------------------
+
+def _circumradius(p1: Point2D, p2: Point2D, p3: Point2D) -> float:
+    """Return circumradius of triangle (p1, p2, p3), or inf if near-collinear."""
+    ax, ay = p1;  bx, by = p2;  cx, cy = p3
+    a = math.hypot(bx - cx, by - cy)
+    b = math.hypot(ax - cx, ay - cy)
+    c = math.hypot(ax - bx, ay - by)
+    # D = 4 × signed_area of the triangle
+    D = abs(2.0 * (ax * (by - cy) + bx * (cy - ay) + cx * (ay - by)))
+    if D < 1e-10:
+        return float("inf")
+    return (a * b * c) / D
+
+
+def _chord_length(arc: ArcSegment) -> float:
+    return math.hypot(arc.end[0] - arc.start[0], arc.end[1] - arc.start[1])
+
+
+def merge_consecutive_arcs(
+    segments: List[Segment],
+    radius_rel_tol: float = 0.01,
+) -> List[Segment]:
+    """Collapse runs of consecutive ArcSegments that lie on the same circle.
+
+    Co-circularity is tested geometrically: the circumradius of the three
+    control points (run start, junction, run end) must match the arc radius
+    within *radius_rel_tol* × radius.  This avoids dependence on the
+    internally stored center, which can drift depending on chord direction.
+
+    The merged arc reuses the center/radius of the arc with the longest chord
+    in the run (the "longest arc" reference per the user requirement).
+    """
+    if not segments:
+        return segments
+
+    result: List[Segment] = []
+    i = 0
+    while i < len(segments):
+        seg = segments[i]
+        if not isinstance(seg, ArcSegment):
+            result.append(seg)
+            i += 1
+            continue
+
+        # Accumulate a run of co-circular consecutive arcs
+        group: List[ArcSegment] = [seg]
+        j = i + 1
+        while j < len(segments):
+            nxt = segments[j]
+            if not isinstance(nxt, ArcSegment):
+                break
+            prev = group[-1]
+            if nxt.ccw != prev.ccw:
+                break
+            avg_r = (nxt.radius + prev.radius) / 2.0
+            if abs(nxt.radius - prev.radius) > radius_rel_tol * avg_r:
+                break
+            # Geometric co-circle check: circumradius of (group[0].start,
+            # prev.end, nxt.end) must equal the arc radius.
+            cr = _circumradius(group[0].start, prev.end, nxt.end)
+            if abs(cr - avg_r) > radius_rel_tol * avg_r:
+                break
+            group.append(nxt)
+            j += 1
+
+        if len(group) == 1:
+            result.append(seg)
+        else:
+            # Reference arc: the one with the longest chord
+            ref = max(group, key=_chord_length)
+            result.append(ArcSegment(
+                start=group[0].start,
+                end=group[-1].end,
+                center=ref.center,
+                radius=ref.radius,
+                ccw=group[0].ccw,
+            ))
+        i = j
+
+    return result
+
+
+# ---------------------------------------------------------------------------
 # LWPolyline → segments
 # ---------------------------------------------------------------------------
 
@@ -183,6 +268,7 @@ def lwpolyline_to_segments(
     a list of LineSegment / ArcSegment objects.
 
     For a *closed* polyline the last vertex connects back to the first.
+    Consecutive arc segments that lie on the same circle are merged into one.
     """
     segments: List[Segment] = []
     n = len(vertices)
@@ -202,7 +288,7 @@ def lwpolyline_to_segments(
             seg = _arc_from_bulge(p1, p2, b1)
         segments.append(seg)
 
-    return segments
+    return merge_consecutive_arcs(segments)
 
 
 def extract_lwpolyline_xybulge(entity) -> List[Tuple[float, float, float]]:
