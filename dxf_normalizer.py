@@ -862,15 +862,6 @@ def process_file(in_path: Path, out_dir: Path) -> Optional[Path]:
     material = _material_from_folder(in_path) or detect_material(doc, in_path)
     print(f"[INFO] Material: {material}")
 
-    # ---- Arc Healing (before any routing / layer processing) ---------------
-    try:
-        from arc_healing import heal_arcs_in_doc, print_arc_heal_report
-        _heal_report = heal_arcs_in_doc(doc)
-        print_arc_heal_report(_heal_report, in_path.name)
-    except Exception as _arc_heal_exc:
-        print(f"[WARN] Arc healing skipped: {_arc_heal_exc}")
-    # -------------------------------------------------------------------------
-
     # Remap OCL_BIN -> ProcPart_{T} (blue)
     remap_bin_to_procpart(doc, thickness_T)
 
