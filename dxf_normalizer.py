@@ -33,6 +33,8 @@ import ezdxf
 from ezdxf.entities import Ellipse, Spline
 from ezdxf.math import ConstructionEllipse, Matrix44
 
+from arc_repair import repair_opencutlist_arcs
+
 # ------------------ CONFIG ------------------
 
 THROUGH_TOL_MM = 0.2           # D ≈ T tolerance
@@ -855,6 +857,7 @@ def process_file(in_path: Path, out_dir: Path) -> Optional[Path]:
         print(f"[ERROR] Failed to read {in_path}: {e}")
         return None
 
+    repair_opencutlist_arcs(doc)   # merge fragmented ARC chains before any conversion
     auto_units_to_mm(doc)
     thickness_T = get_material_thickness(doc)
 
